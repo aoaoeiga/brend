@@ -11,9 +11,23 @@ async function ensureSettings(supabase: ReturnType<typeof getSupabase>) {
     .limit(1)
     .single();
 
-  if (data) return data;
+  // 行が存在し、pin_hashがbcryptフォーマット($2a$/$2b$で始まる)ならそのまま返す
+  if (data && data.pin_hash && data.pin_hash.startsWith("$2")) {
+    return data;
+  }
 
-  // settingsが存在しなければ初期PIN「0000」で自動作成
+  // 行が存在するがpin_hashが不正 → 正しいハッシュで更新
+  if (data) {
+    const hash = await bcrypt.hash(DEFAULT_PIN, 10);
+    const { error: updateError } = await supabase
+      .from("settings")
+      .update({ pin_hash: hash, updated_at: new Date().toISOString() })
+      .eq("id", data.id);
+    if (updateError) return null;
+    return { ...data, pin_hash: hash };
+  }
+
+  // 行が存在しない(PGRST116) → 新規作成
   if (error && error.code === "PGRST116") {
     const hash = await bcrypt.hash(DEFAULT_PIN, 10);
     const { data: created, error: insertError } = await supabase
@@ -21,7 +35,6 @@ async function ensureSettings(supabase: ReturnType<typeof getSupabase>) {
       .insert({ pin_hash: hash, store_name: "Cafe BRE+ND" })
       .select("id, pin_hash")
       .single();
-
     if (insertError) return null;
     return created;
   }
