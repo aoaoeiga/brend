@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import Navigation from "@/components/Navigation";
 import { supabase } from "@/lib/supabase";
-import { OrderWithItems, Staff, MenuItem } from "@/lib/types";
+import { OrderWithItems, Staff } from "@/lib/types";
 
 export default function HistoryPage() {
   const { isAuthenticated } = useAuth();
@@ -46,6 +46,18 @@ export default function HistoryPage() {
     setLoading(false);
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!supabase || !confirm("この注文を削除しますか？（取り消しできません）")) return;
+    // order_itemsはCASCADE削除される想定
+    const { error } = await supabase.from("orders").delete().eq("id", orderId);
+    if (error) {
+      // CASCADEがない場合、手動で削除
+      await supabase.from("order_items").delete().eq("order_id", orderId);
+      await supabase.from("orders").delete().eq("id", orderId);
+    }
+    fetchOrders();
+  };
+
   const filteredOrders = orders.filter((order) => {
     if (filterStaff && order.staff_id !== filterStaff) return false;
     if (filterDate && order.paid_at) {
@@ -57,89 +69,6 @@ export default function HistoryPage() {
     if (searchAmount && !String(order.total).includes(searchAmount)) return false;
     return true;
   });
-
-  const exportPDF = async (mode: "daily" | "monthly") => {
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF();
-    const title = mode === "daily" ? "日次レポート" : "月次レポート";
-
-    doc.setFontSize(18);
-    doc.text(`Cafe BRE+ND - ${title}`, 14, 22);
-    doc.setFontSize(10);
-    doc.text(`Generated: ${new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`, 14, 30);
-
-    let y = 40;
-    doc.setFontSize(10);
-    doc.text("Date", 14, y);
-    doc.text("Staff", 60, y);
-    doc.text("Total", 120, y);
-    doc.text("Items", 150, y);
-    y += 6;
-    doc.line(14, y, 196, y);
-    y += 4;
-
-    const ordersToExport = filteredOrders.slice(0, 50);
-    let grandTotal = 0;
-
-    ordersToExport.forEach((order) => {
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
-      const date = order.paid_at
-        ? new Date(order.paid_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })
-        : "-";
-      const staffName = order.staffs?.name || "-";
-      const itemCount = order.order_items?.reduce((s, i) => s + i.quantity, 0) || 0;
-      grandTotal += order.total;
-
-      doc.text(date, 14, y);
-      doc.text(staffName, 60, y);
-      doc.text(`Y${order.total.toLocaleString()}`, 120, y);
-      doc.text(String(itemCount), 150, y);
-      y += 6;
-    });
-
-    y += 4;
-    doc.line(14, y, 196, y);
-    y += 6;
-    doc.setFontSize(12);
-    doc.text(`Total: Y${grandTotal.toLocaleString()} (${ordersToExport.length} orders)`, 14, y);
-
-    doc.save(`brend_${mode}_report_${new Date().toISOString().split("T")[0]}.pdf`);
-  };
-
-  const exportMenuBackup = async (format: "json" | "csv") => {
-    if (!supabase) return;
-    const { data } = await supabase.from("menus").select("*").order("category").order("name");
-    if (!data) return;
-
-    let content: string;
-    let type: string;
-    let ext: string;
-
-    if (format === "json") {
-      content = JSON.stringify(data, null, 2);
-      type = "application/json";
-      ext = "json";
-    } else {
-      const headers = ["id", "name", "price", "category", "image_url", "is_available"];
-      const rows = data.map((item: MenuItem) =>
-        headers.map((h) => String((item as unknown as Record<string, unknown>)[h] ?? "")).join(",")
-      );
-      content = [headers.join(","), ...rows].join("\n");
-      type = "text/csv";
-      ext = "csv";
-    }
-
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `brend_menu_backup.${ext}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   if (!isAuthenticated) return null;
 
@@ -158,7 +87,6 @@ export default function HistoryPage() {
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
               className="px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text text-sm focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
-              placeholder="日付"
             />
             <select
               value={filterStaff}
@@ -192,33 +120,9 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Export buttons */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            onClick={() => exportPDF("daily")}
-            className="px-4 py-2 bg-cafe-button text-white rounded-cafe text-sm font-medium hover:bg-cafe-button/90 transition-colors"
-          >
-            日次PDF出力
-          </button>
-          <button
-            onClick={() => exportPDF("monthly")}
-            className="px-4 py-2 bg-cafe-button text-white rounded-cafe text-sm font-medium hover:bg-cafe-button/90 transition-colors"
-          >
-            月次PDF出力
-          </button>
-          <button
-            onClick={() => exportMenuBackup("json")}
-            className="px-4 py-2 bg-cafe-accent text-white rounded-cafe text-sm font-medium hover:bg-cafe-accent/90 transition-colors"
-          >
-            メニューJSON
-          </button>
-          <button
-            onClick={() => exportMenuBackup("csv")}
-            className="px-4 py-2 bg-cafe-accent text-white rounded-cafe text-sm font-medium hover:bg-cafe-accent/90 transition-colors"
-          >
-            メニューCSV
-          </button>
-        </div>
+        <p className="text-sm text-cafe-text/60 mb-3">
+          {filteredOrders.length}件の注文
+        </p>
 
         {/* Orders list */}
         {loading ? (
@@ -245,9 +149,17 @@ export default function HistoryPage() {
                       担当: {order.staffs?.name || "-"}
                     </p>
                   </div>
-                  <p className="text-lg font-bold text-cafe-accent">
-                    ¥{order.total.toLocaleString()}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-lg font-bold text-cafe-accent">
+                      ¥{order.total.toLocaleString()}
+                    </p>
+                    <button
+                      onClick={() => handleDeleteOrder(order.id)}
+                      className="px-2 py-1 bg-cafe-danger/10 text-cafe-danger rounded text-xs font-medium hover:bg-cafe-danger/20 transition-colors"
+                    >
+                      削除
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {order.order_items?.map((item, idx) => (

@@ -12,6 +12,7 @@ export interface MenuItem {
   category: string;
   image_url: string | null;
   is_available: boolean;
+  cost_rate: number | null;
   created_at: string;
 }
 

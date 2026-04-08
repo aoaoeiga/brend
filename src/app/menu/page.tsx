@@ -18,6 +18,7 @@ export default function MenuPage() {
     price: "",
     category: "fast_coffee",
     image_url: "",
+    cost_rate: "",
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,12 +64,17 @@ export default function MenuPage() {
     if (!supabase) return;
     setSaving(true);
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: form.name,
       price: parseInt(form.price),
       category: form.category,
       image_url: form.image_url || null,
     };
+
+    // cost_rateカラムがあれば設定（なければSupabaseが無視する）
+    if (form.cost_rate !== "") {
+      payload.cost_rate = parseInt(form.cost_rate);
+    }
 
     if (editingItem) {
       await supabase.from("menus").update(payload).eq("id", editingItem.id);
@@ -82,7 +88,7 @@ export default function MenuPage() {
   };
 
   const resetForm = () => {
-    setForm({ name: "", price: "", category: "fast_coffee", image_url: "" });
+    setForm({ name: "", price: "", category: "fast_coffee", image_url: "", cost_rate: "" });
     setEditingItem(null);
     setShowForm(false);
   };
@@ -94,6 +100,7 @@ export default function MenuPage() {
       price: String(item.price),
       category: item.category,
       image_url: item.image_url || "",
+      cost_rate: item.cost_rate != null ? String(item.cost_rate) : "",
     });
     setShowForm(true);
   };
@@ -157,20 +164,38 @@ export default function MenuPage() {
                     className="w-full px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-cafe-text mb-1">
-                    価格（税込・円）
-                  </label>
-                  <input
-                    type="number"
-                    value={form.price}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, price: e.target.value }))
-                    }
-                    required
-                    min="0"
-                    className="w-full px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
-                  />
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-cafe-text mb-1">
+                      価格（税込・円）
+                    </label>
+                    <input
+                      type="number"
+                      value={form.price}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, price: e.target.value }))
+                      }
+                      required
+                      min="0"
+                      className="w-full px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-cafe-text mb-1">
+                      原価率（%）
+                    </label>
+                    <input
+                      type="number"
+                      value={form.cost_rate}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, cost_rate: e.target.value }))
+                      }
+                      min="0"
+                      max="100"
+                      placeholder="例: 30"
+                      className="w-full px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-cafe-text mb-1">
@@ -267,9 +292,16 @@ export default function MenuPage() {
                       <p className="font-medium text-cafe-text truncate">
                         {item.name}
                       </p>
-                      <p className="text-sm text-cafe-accent font-bold">
-                        ¥{item.price.toLocaleString()}
-                      </p>
+                      <div className="flex gap-2 items-center">
+                        <p className="text-sm text-cafe-accent font-bold">
+                          ¥{item.price.toLocaleString()}
+                        </p>
+                        {item.cost_rate != null && (
+                          <p className="text-xs text-cafe-text/50">
+                            原価率{item.cost_rate}%
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button

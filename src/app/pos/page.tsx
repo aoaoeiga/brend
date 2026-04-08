@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import Navigation from "@/components/Navigation";
@@ -17,7 +17,6 @@ export default function POSPage() {
   const [lastOrder, setLastOrder] = useState<{ id: string; total: number; items: CartItem[]; paidAt: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
-  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -174,7 +173,7 @@ export default function POSPage() {
         <div className="hidden md:flex flex-col w-80 bg-cafe-card border-l border-cafe-accent/20 shadow-cafe">
           <div className="p-4 border-b border-cafe-accent/20">
             <h3 className="text-lg font-bold text-cafe-text font-serif">
-              🛒 カート
+              カート
             </h3>
           </div>
           <div className="flex-1 overflow-auto p-4">
@@ -245,8 +244,7 @@ export default function POSPage() {
             onClick={() => setShowCart(true)}
             className="md:hidden fixed bottom-16 right-4 bg-cafe-success text-white rounded-full px-6 py-3 shadow-cafe-lg z-40 font-bold"
           >
-            🛒 {cart.reduce((s, c) => s + c.quantity, 0)}点 ¥
-            {total.toLocaleString()}
+            {cart.reduce((s, c) => s + c.quantity, 0)}点 ¥{total.toLocaleString()}
           </button>
         )}
 
@@ -260,7 +258,7 @@ export default function POSPage() {
             <div className="bg-cafe-card rounded-t-2xl p-4 max-h-[70vh] flex flex-col">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-bold text-cafe-text font-serif">
-                  🛒 カート
+                  カート
                 </h3>
                 <button
                   onClick={() => setShowCart(false)}
@@ -320,16 +318,16 @@ export default function POSPage() {
           </div>
         )}
 
-        {/* Receipt modal */}
+        {/* Receipt modal - simplified, no print */}
         {showReceipt && lastOrder && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-cafe-lg shadow-cafe-lg max-w-sm w-full max-h-[90vh] overflow-auto">
-              <div ref={receiptRef} className="p-6">
+              <div className="p-6">
                 <div className="text-center border-b border-dashed border-gray-300 pb-4 mb-4">
                   <h2 className="text-xl font-bold font-serif text-cafe-text">
                     Cafe BRE+ND
                   </h2>
-                  <p className="text-xs text-gray-500 mt-1">レシート</p>
+                  <p className="text-xs text-gray-500 mt-1">会計完了</p>
                   <p className="text-xs text-gray-500">
                     {new Date(lastOrder.paidAt).toLocaleString("ja-JP", {
                       timeZone: "Asia/Tokyo",
@@ -367,19 +365,13 @@ export default function POSPage() {
                 </p>
               </div>
 
-              <div className="p-4 border-t flex gap-2 no-print">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 py-2 bg-cafe-button text-white rounded-cafe font-medium transition-colors hover:bg-cafe-button/90"
-                >
-                  印刷
-                </button>
+              <div className="p-4 border-t">
                 <button
                   onClick={() => {
                     setShowReceipt(false);
                     setLastOrder(null);
                   }}
-                  className="flex-1 py-2 bg-cafe-bg text-cafe-text rounded-cafe font-medium border border-cafe-accent/20 transition-colors hover:bg-cafe-accent/10"
+                  className="w-full py-2 bg-cafe-button text-white rounded-cafe font-medium transition-colors hover:bg-cafe-button/90"
                 >
                   閉じる
                 </button>
