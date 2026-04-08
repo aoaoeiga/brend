@@ -22,8 +22,10 @@ export default function LoginPage() {
         .select("*")
         .eq("is_active", true)
         .order("name")
-        .then(({ data }) => {
+        .then(({ data, error }) => {
+          console.log("[Staff] fetch result:", { data, error });
           if (data) setStaffList(data);
+          if (error) setError("スタッフ取得エラー: " + error.message);
         });
     }
   }, [pinVerified]);
