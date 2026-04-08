@@ -44,19 +44,23 @@ export default function LoginPage() {
     if (pin.length !== 4) return;
     setLoading(true);
     try {
+      console.log("[Login] Submitting PIN:", pin);
       const res = await fetch("/api/verify-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pin }),
       });
+      console.log("[Login] Response status:", res.status);
       const data = await res.json();
+      console.log("[Login] Response data:", JSON.stringify(data));
       if (data.success) {
         setPinVerified(true);
       } else {
         setError(data.message || "PINが正しくありません");
         setPin("");
       }
-    } catch {
+    } catch (e) {
+      console.error("[Login] Fetch error:", e);
       setError("認証エラーが発生しました");
       setPin("");
     }
