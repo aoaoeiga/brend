@@ -6,6 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import Navigation from "@/components/Navigation";
 import { supabase } from "@/lib/supabase";
 import { Order, Expense, MenuItem } from "@/lib/types";
+import { buildMonthlyReport } from "@/lib/report-data";
 import dynamic from "next/dynamic";
 
 const SalesBarChart = dynamic(() => import("@/components/SalesChart").then((m) => m.SalesBarChart), { ssr: false });
@@ -40,6 +41,9 @@ export default function ReportPage() {
     date: new Date().toISOString().split("T")[0],
   });
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [downloadMonth, setDownloadMonth] = useState(selectedMonth);
+  const [downloading, setDownloading] = useState<null | "excel" | "pdf">(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -175,6 +179,25 @@ export default function ReportPage() {
     fetchData();
   };
 
+  const handleDownload = async (format: "excel" | "pdf") => {
+    setDownloadError(null);
+    setDownloading(format);
+    try {
+      const report = await buildMonthlyReport(downloadMonth);
+      const exporter = await import("@/lib/report-export");
+      if (format === "excel") {
+        exporter.downloadExcel(report);
+      } else {
+        await exporter.downloadPdf(report);
+      }
+    } catch (err) {
+      console.error("月次報告書の生成に失敗しました:", err);
+      setDownloadError(err instanceof Error ? err.message : "ダウンロードに失敗しました。");
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
@@ -208,6 +231,42 @@ export default function ReportPage() {
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
           />
+        </div>
+
+        {/* Monthly report download */}
+        <div className="bg-cafe-card rounded-cafe-lg shadow-cafe p-4 mb-6 border border-cafe-accent/10">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-cafe-text font-serif">月次報告書をダウンロード</h3>
+              <p className="text-xs text-cafe-text/50 mt-1">対象月を選んで、Excel または PDF で全7セクションの報告書を出力します。</p>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+              <div className="flex flex-col">
+                <label className="text-xs text-cafe-text/60 mb-1">対象月</label>
+                <input
+                  type="month"
+                  value={downloadMonth}
+                  onChange={(e) => setDownloadMonth(e.target.value)}
+                  className="px-3 py-2 border border-cafe-accent/20 rounded-cafe bg-white text-cafe-text focus:outline-none focus:ring-2 focus:ring-cafe-accent/40"
+                />
+              </div>
+              <button
+                onClick={() => handleDownload("excel")}
+                disabled={downloading !== null}
+                className="px-4 py-2 bg-cafe-success text-white rounded-cafe text-sm font-medium hover:bg-cafe-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {downloading === "excel" ? "生成中…" : "📊 Excelでダウンロード"}
+              </button>
+              <button
+                onClick={() => handleDownload("pdf")}
+                disabled={downloading !== null}
+                className="px-4 py-2 bg-cafe-button text-white rounded-cafe text-sm font-medium hover:bg-cafe-button/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {downloading === "pdf" ? "生成中…" : "📄 PDFでダウンロード"}
+              </button>
+            </div>
+          </div>
+          {downloadError && <p className="text-xs text-cafe-danger mt-2">{downloadError}</p>}
         </div>
 
         {/* Summary cards */}
