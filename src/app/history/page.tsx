@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import Navigation from "@/components/Navigation";
 import { supabase } from "@/lib/supabase";
 import { OrderWithItems, Staff } from "@/lib/types";
+
+const PAGE_SIZE = 50;
 
 export default function HistoryPage() {
   const { isAuthenticated } = useAuth();
@@ -16,13 +18,16 @@ export default function HistoryPage() {
   const [filterDate, setFilterDate] = useState("");
   const [searchAmount, setSearchAmount] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push("/");
       return;
     }
-    fetchOrders();
+    fetchOrders(true);
     fetchStaffs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, router]);
@@ -33,38 +38,55 @@ export default function HistoryPage() {
     if (data) setStaffList(data);
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async (reset: boolean) => {
     if (!supabase) return;
-    setLoading(true);
-    const { data } = await supabase
+    if (reset) {
+      setLoading(true);
+      setOrders([]);
+    } else {
+      setLoadingMore(true);
+    }
+
+    const offset = reset ? 0 : orders.length;
+
+    const { data, count } = await supabase
       .from("orders")
-      .select("*, order_items(*, menus(*)), staffs(*)")
+      .select("*, order_items(*, menus(*)), staffs(*)", { count: "exact" })
       .eq("status", "paid")
-      .order("paid_at", { ascending: false })
-      .limit(200);
-    if (data) setOrders(data as unknown as OrderWithItems[]);
+      .order("created_at", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (data) {
+      const typed = data as unknown as OrderWithItems[];
+      setOrders((prev) => reset ? typed : [...prev, ...typed]);
+      setHasMore(typed.length === PAGE_SIZE);
+    }
+    if (count !== null) setTotalCount(count);
+
     setLoading(false);
-  };
+    setLoadingMore(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.length]);
 
   const handleDeleteOrder = async (orderId: string) => {
     if (!supabase || !confirm("この注文を削除しますか？（取り消しできません）")) return;
-    // order_itemsはCASCADE削除される想定
     const { error } = await supabase.from("orders").delete().eq("id", orderId);
     if (error) {
-      // CASCADEがない場合、手動で削除
       await supabase.from("order_items").delete().eq("order_id", orderId);
       await supabase.from("orders").delete().eq("id", orderId);
     }
-    fetchOrders();
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    if (totalCount !== null) setTotalCount(totalCount - 1);
   };
 
   const filteredOrders = orders.filter((order) => {
     if (filterStaff && order.staff_id !== filterStaff) return false;
-    if (filterDate && order.paid_at) {
-      const orderDate = new Date(order.paid_at)
-        .toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })
-        .replace(/\//g, "-");
-      if (!orderDate.includes(filterDate)) return false;
+    if (filterDate && (order.paid_at || order.created_at)) {
+      const ts = order.paid_at || order.created_at;
+      const orderDate = new Date(ts).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" });
+      const filterParts = filterDate.split("-");
+      const formatted = `${Number(filterParts[0])}/${Number(filterParts[1])}/${Number(filterParts[2])}`;
+      if (orderDate !== formatted) return false;
     }
     if (searchAmount && !String(order.total).includes(searchAmount)) return false;
     return true;
@@ -121,7 +143,7 @@ export default function HistoryPage() {
         </div>
 
         <p className="text-sm text-cafe-text/60 mb-3">
-          {filteredOrders.length}件の注文
+          {filteredOrders.length}件表示{totalCount !== null ? ` / 全${totalCount}件` : ""}
         </p>
 
         {/* Orders list */}
@@ -130,55 +152,70 @@ export default function HistoryPage() {
             <div className="w-8 h-8 border-2 border-cafe-accent border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredOrders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-cafe-card rounded-cafe-lg shadow-cafe p-4"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="text-xs text-cafe-text/60">
-                      {order.paid_at
-                        ? new Date(order.paid_at).toLocaleString("ja-JP", {
-                            timeZone: "Asia/Tokyo",
-                          })
-                        : "-"}
-                    </p>
-                    <p className="text-xs text-cafe-text/60">
-                      担当: {order.staffs?.name || "-"}
-                    </p>
+          <>
+            <div className="space-y-3">
+              {filteredOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-cafe-card rounded-cafe-lg shadow-cafe p-4"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="text-xs text-cafe-text/60">
+                        {(order.paid_at || order.created_at)
+                          ? new Date(order.paid_at || order.created_at).toLocaleString("ja-JP", {
+                              timeZone: "Asia/Tokyo",
+                            })
+                          : "-"}
+                      </p>
+                      <p className="text-xs text-cafe-text/60">
+                        担当: {order.staffs?.name || "-"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-lg font-bold text-cafe-accent">
+                        ¥{order.total.toLocaleString()}
+                      </p>
+                      <button
+                        onClick={() => handleDeleteOrder(order.id)}
+                        className="px-2 py-1 bg-cafe-danger/10 text-cafe-danger rounded text-xs font-medium hover:bg-cafe-danger/20 transition-colors"
+                      >
+                        削除
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <p className="text-lg font-bold text-cafe-accent">
-                      ¥{order.total.toLocaleString()}
-                    </p>
-                    <button
-                      onClick={() => handleDeleteOrder(order.id)}
-                      className="px-2 py-1 bg-cafe-danger/10 text-cafe-danger rounded text-xs font-medium hover:bg-cafe-danger/20 transition-colors"
-                    >
-                      削除
-                    </button>
+                  <div className="flex flex-wrap gap-1">
+                    {order.order_items?.map((item, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs bg-cafe-bg text-cafe-text rounded px-2 py-0.5"
+                      >
+                        {item.menus?.name || "?"} x{item.quantity}
+                      </span>
+                    ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {order.order_items?.map((item, idx) => (
-                    <span
-                      key={idx}
-                      className="text-xs bg-cafe-bg text-cafe-text rounded px-2 py-0.5"
-                    >
-                      {item.menus?.name || "?"} x{item.quantity}
-                    </span>
-                  ))}
-                </div>
+              ))}
+              {filteredOrders.length === 0 && (
+                <p className="text-cafe-text/40 text-center py-8">
+                  注文履歴がありません
+                </p>
+              )}
+            </div>
+
+            {/* Load more */}
+            {hasMore && (
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={() => fetchOrders(false)}
+                  disabled={loadingMore}
+                  className="px-6 py-2 bg-cafe-button text-white rounded-cafe font-medium hover:bg-cafe-button/90 disabled:opacity-50 transition-colors"
+                >
+                  {loadingMore ? "読み込み中..." : "もっと読み込む"}
+                </button>
               </div>
-            ))}
-            {filteredOrders.length === 0 && (
-              <p className="text-cafe-text/40 text-center py-8">
-                注文履歴がありません
-              </p>
             )}
-          </div>
+          </>
         )}
       </div>
     </Navigation>

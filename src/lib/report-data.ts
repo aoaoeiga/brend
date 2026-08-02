@@ -130,16 +130,16 @@ export async function buildMonthlyReport(yearMonth: string): Promise<MonthlyRepo
   const { data: curOrderIdRows } = await supabase
     .from("orders")
     .select("id")
-    .gte("paid_at", `${start}T00:00:00`)
-    .lte("paid_at", `${end}T23:59:59`)
+    .gte("paid_at", `${start}T00:00:00+09:00`)
+    .lte("paid_at", `${end}T23:59:59+09:00`)
     .eq("status", "paid");
   const curIds = (curOrderIdRows || []).map((o: { id: string }) => o.id);
 
   const { data: pmOrderIdRows } = await supabase
     .from("orders")
     .select("id")
-    .gte("paid_at", `${pm.start}T00:00:00`)
-    .lte("paid_at", `${pm.end}T23:59:59`)
+    .gte("paid_at", `${pm.start}T00:00:00+09:00`)
+    .lte("paid_at", `${pm.end}T23:59:59+09:00`)
     .eq("status", "paid");
   const pmIds = (pmOrderIdRows || []).map((o: { id: string }) => o.id);
 
@@ -147,8 +147,8 @@ export async function buildMonthlyReport(yearMonth: string): Promise<MonthlyRepo
     supabase
       .from("orders")
       .select("id, total, staff_id, paid_at")
-      .gte("paid_at", `${start}T00:00:00`)
-      .lte("paid_at", `${end}T23:59:59`)
+      .gte("paid_at", `${start}T00:00:00+09:00`)
+      .lte("paid_at", `${end}T23:59:59+09:00`)
       .eq("status", "paid")
       .order("paid_at"),
     curIds.length > 0
@@ -180,8 +180,8 @@ export async function buildMonthlyReport(yearMonth: string): Promise<MonthlyRepo
   const { data: pmTotalsRows } = await supabase
     .from("orders")
     .select("total")
-    .gte("paid_at", `${pm.start}T00:00:00`)
-    .lte("paid_at", `${pm.end}T23:59:59`)
+    .gte("paid_at", `${pm.start}T00:00:00+09:00`)
+    .lte("paid_at", `${pm.end}T23:59:59+09:00`)
     .eq("status", "paid");
   const pmSales = (pmTotalsRows || []).reduce((s: number, o: { total: number }) => s + o.total, 0);
   const pmCost = totalCostOf(pmItems);

@@ -17,6 +17,7 @@ export default function POSPage() {
   const [lastOrder, setLastOrder] = useState<{ id: string; total: number; items: CartItem[]; paidAt: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -98,7 +99,8 @@ export default function POSPage() {
       setShowCart(false);
     } catch (err) {
       console.error("Checkout error:", err);
-      alert("会計処理でエラーが発生しました");
+      setToast({ message: "保存できませんでした。もう一度お試しください。", type: "error" });
+      setTimeout(() => setToast(null), 4000);
     }
     setLoading(false);
   };
@@ -112,6 +114,13 @@ export default function POSPage() {
 
   return (
     <Navigation>
+      {toast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-6 py-3 rounded-cafe shadow-cafe-lg text-white font-medium text-sm animate-pulse ${
+          toast.type === "error" ? "bg-cafe-danger" : "bg-cafe-success"
+        }`}>
+          {toast.message}
+        </div>
+      )}
       <div className="flex flex-col md:flex-row h-full">
         {/* Menu area */}
         <div className="flex-1 p-4 overflow-auto">

@@ -14,6 +14,17 @@ const CategoryPieChart = dynamic(() => import("@/components/SalesChart").then((m
 const HourlyBarChart = dynamic(() => import("@/components/SalesChart").then((m) => m.HourlyBarChart), { ssr: false });
 const RankingBarChart = dynamic(() => import("@/components/SalesChart").then((m) => m.RankingBarChart), { ssr: false });
 
+function jstToday(): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+}
+
+function getJSTHour(ts: string): number {
+  const h = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", hour: "numeric", hour12: false }).format(new Date(ts))
+  );
+  return h === 24 ? 0 : h;
+}
+
 interface OrderItemWithMenu {
   quantity: number;
   subtotal: number;
@@ -29,16 +40,13 @@ export default function ReportPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItemWithMenu[]>([]);
   const [menus, setMenus] = useState<MenuItem[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [selectedMonth, setSelectedMonth] = useState(() => jstToday().slice(0, 7));
   const [tab, setTab] = useState<"dashboard" | "products" | "profit" | "expenses">("dashboard");
   const [expenseForm, setExpenseForm] = useState({
     name: "",
     amount: "",
     category: "材料費",
-    date: new Date().toISOString().split("T")[0],
+    date: jstToday(),
   });
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [downloadMonth, setDownloadMonth] = useState(selectedMonth);
@@ -61,8 +69,7 @@ export default function ReportPage() {
     const endDay = new Date(year, month, 0).getDate();
     const endStr = `${selectedMonth}-${String(endDay).padStart(2, "0")}`;
 
-    // Today
-    const today = new Date().toISOString().split("T")[0];
+    const today = jstToday();
 
     // Last month
     const lmYear = month === 1 ? year - 1 : year;
@@ -75,16 +82,16 @@ export default function ReportPage() {
     const { data: monthOrderIds } = await supabase
       .from("orders")
       .select("id")
-      .gte("paid_at", `${startDate}T00:00:00`)
-      .lte("paid_at", `${endStr}T23:59:59`)
+      .gte("paid_at", `${startDate}T00:00:00+09:00`)
+      .lte("paid_at", `${endStr}T23:59:59+09:00`)
       .eq("status", "paid");
 
     const ids = monthOrderIds?.map((o: { id: string }) => o.id) || [];
 
     const [ordersRes, todayRes, lastMonthRes, expensesRes, itemsRes, menusRes] = await Promise.all([
-      supabase.from("orders").select("*").gte("paid_at", `${startDate}T00:00:00`).lte("paid_at", `${endStr}T23:59:59`).eq("status", "paid").order("paid_at"),
-      supabase.from("orders").select("*").gte("paid_at", `${today}T00:00:00`).lte("paid_at", `${today}T23:59:59`).eq("status", "paid"),
-      supabase.from("orders").select("total").gte("paid_at", `${lmStart}T00:00:00`).lte("paid_at", `${lmEnd}T23:59:59`).eq("status", "paid"),
+      supabase.from("orders").select("*").gte("paid_at", `${startDate}T00:00:00+09:00`).lte("paid_at", `${endStr}T23:59:59+09:00`).eq("status", "paid").order("paid_at"),
+      supabase.from("orders").select("*").gte("paid_at", `${today}T00:00:00+09:00`).lte("paid_at", `${today}T23:59:59+09:00`).eq("status", "paid"),
+      supabase.from("orders").select("total").gte("paid_at", `${lmStart}T00:00:00+09:00`).lte("paid_at", `${lmEnd}T23:59:59+09:00`).eq("status", "paid"),
       supabase.from("expenses").select("*").gte("date", startDate).lte("date", endStr).order("date"),
       ids.length > 0
         ? supabase.from("order_items").select("quantity, subtotal, menus(name, category, price, cost_rate)").in("order_id", ids)
@@ -139,7 +146,7 @@ export default function ReportPage() {
     const map: Record<number, number> = {};
     orders.forEach((o) => {
       if (!o.paid_at) return;
-      const h = new Date(o.paid_at).getHours();
+      const h = getJSTHour(o.paid_at);
       map[h] = (map[h] || 0) + 1;
     });
     const result = [];
@@ -207,7 +214,7 @@ export default function ReportPage() {
       category: expenseForm.category,
       date: expenseForm.date,
     });
-    setExpenseForm({ name: "", amount: "", category: "材料費", date: new Date().toISOString().split("T")[0] });
+    setExpenseForm({ name: "", amount: "", category: "材料費", date: jstToday() });
     setShowExpenseForm(false);
     fetchData();
   };
